@@ -1,0 +1,56 @@
+#!/usr/bin/env php
+<?php
+function remote_get_svn_revmap($url) {
+    $revmap = array();
+
+    $info = `svn ls -v $url`;
+    foreach(explode("\n", $info) as $line) {
+        if (preg_match('@^\s+([0-9]+)\s.*?\s([^\.][a-zA-Z\-\._]+)/$@', $line, $matches)) {
+            $rev = $matches[1];
+            $dir = $matches[2];
+            $revmap[$dir] = (int) $rev;
+        }
+    }
+
+    return $revmap;
+}
+
+function workingdir_get_lastrev($repository) {
+    if (!is_dir($repository) || !is_dir($repository . "/.git")) {
+        return NULL;
+    }
+    $cwd = getcwd();
+    chdir($repository);
+
+    $orev = trim(`git log --all -n 1 | tail -n1 | grep -E -o '@[0-9]+'`);
+    $rev  = (int) substr($orev, 1);
+    if ($rev <= 0) {
+       fprintf(STDERR, "Error '%s' in repository %s\n", $orev, $repository);
+    }
+    chdir($cwd);
+
+    return $rev;
+}
+
+function update_repository($repository) {
+    if (!is_dir($repository) || !is_dir($repository . "/.git")) {
+        return NULL;
+    }
+    
+    $cwd = getcwd();
+    chdir($repository);   
+    passthru("git svn fetch");
+    passthru("git svn rebase");
+    passthru("git push --mirror origin");
+    chdir($cwd);
+}
+
+$revmap = remote_get_svn_revmap('http://svn.php.net/repository/phpdoc');
+foreach($revmap as $directory => $rev) {
+    $repository = sprintf("phpdoc-%s.git", $directory);
+    $last_rev   = workingdir_get_lastrev($repository);
+    if ($last_rev != NULL && $last_rev != $rev) {
+        printf("repository %s needs an update: lastrev %d newrev %d\n", $repository, $last_rev, $rev);
+        update_repository($repository);
+    }
+}

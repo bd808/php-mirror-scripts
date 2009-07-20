@@ -1,0 +1,14 @@
+#!/bin/bash
+cd /home/dsp/mirrors/php-src 
+git svn fetch
+git branch -r | perl -e '
+while(<>) {
+    $_=~s/^\s+//;
+    if($_=~m/^(PHP.*)/) {
+        $rev = `git rev-parse remotes/$1`;
+        `git update-ref refs/heads/$1 $rev`;
+        print "git update-ref refs/heads/$1 $rev";
+    };
+    `git update-ref refs/heads/master refs/remotes/trunk`;
+}'
+git push --mirror origin
